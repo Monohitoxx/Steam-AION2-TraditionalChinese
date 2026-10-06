@@ -1,0 +1,31 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build
+        shell: cmd
+        run: build.bat
+
+      - name: Publish release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "$GITHUB_REF_NAME" > /dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" AION2_CHT.exe --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" AION2_CHT.exe \
+              --title "AION2 繁體中文語言包 $GITHUB_REF_NAME" \
+              --notes-file .github/release-notes.md
+          fi
