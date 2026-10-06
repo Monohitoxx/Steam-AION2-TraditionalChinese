@@ -79,9 +79,3 @@ build.bat
 AION2_CHT.exe /install "D:\SteamLibrary\steamapps\common\AION2" [/nofont]
 AION2_CHT.exe /uninstall "D:\SteamLibrary\steamapps\common\AION2"
 ```
-
-## 致謝
-
-- 簡體中文文字基礎：[nanhezzb/Aion2-Chinese-Patch](https://github.com/nanhezzb/Aion2-Chinese-Patch)
-- 簡繁轉換：[OpenCC](https://github.com/BYVoid/OpenCC)
-- 字型：[Noto Sans CJK](https://github.com/notofonts/noto-cjk)（SIL Open Font License）
