@@ -39,10 +39,8 @@
 ## 語言包內容
 
 - 目前版本同步 **10 月 5 日**的遊戲版本，共 152,723 筆文字。
-- 以 [nanhezzb/Aion2-Chinese-Patch](https://github.com/nanhezzb/Aion2-Chinese-Patch) 的簡體中文補丁為基礎，轉換為繁體（台灣字形），並修正一字多義造成的錯字、統一用詞。
 - 補上原本未翻譯的成就、道具、稱號與介面文字。
 - 刻意保留英文的部分：伺服器名稱、`MAX`／`PVP`／`DPS` 等慣用縮寫、圖形技術名稱。
-- 用詞沿用簡體補丁的譯法再轉繁，專有名詞不一定與台服官方譯名相同。
 
 發現錯字或漏翻，歡迎開 [Issue](https://github.com/Monohitoxx/Steam-AION2-TraditionalChinese/issues) 回報。
 
