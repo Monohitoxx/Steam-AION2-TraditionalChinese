@@ -13,9 +13,65 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Stamp version from tag
+        shell: pwsh
+        run: |
+          $nums = @([regex]::Matches("${{ github.ref_name }}", '\d+') | ForEach-Object { $_.Value })
+          while ($nums.Count -lt 4) { $nums += '0' }
+          $ver = ($nums[0..3] -join '.')
+          $path = 'AION2_CHT.cs'
+          $text = Get-Content $path -Raw
+          $text = $text -replace 'AssemblyVersion\("[\d\.]+"\)', "AssemblyVersion(`"$ver`")"
+          $text = $text -replace 'AssemblyFileVersion\("[\d\.]+"\)', "AssemblyFileVersion(`"$ver`")"
+          Set-Content -Path $path -Value $text -NoNewline -Encoding utf8
+          Write-Host "Assembly version stamped as $ver"
+
       - name: Build
         shell: cmd
         run: build.bat
+
+      # 選用：在 repo secrets 加入 SIGNING_PFX_BASE64 / SIGNING_PFX_PASSWORD 就會自動簽章，
+      # 冇設定就直接略過（唔會令 build 失敗）。簽章可以同時解決防毒誤報同 SmartScreen 警告。
+      - name: Sign executable (optional)
+        shell: pwsh
+        env:
+          SIGNING_PFX_BASE64: ${{ secrets.SIGNING_PFX_BASE64 }}
+          SIGNING_PFX_PASSWORD: ${{ secrets.SIGNING_PFX_PASSWORD }}
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:SIGNING_PFX_BASE64)) {
+            Write-Host "No signing secrets configured - skipping code signing."
+            exit 0
+          }
+          $pfx = Join-Path $env:RUNNER_TEMP 'signing.pfx'
+          [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:SIGNING_PFX_BASE64))
+          $signtool = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin\*\x64\signtool.exe" |
+            Sort-Object FullName -Descending | Select-Object -First 1
+          if (-not $signtool) { throw "signtool.exe not found on this runner" }
+          & $signtool.FullName sign /fd SHA256 /f $pfx /p $env:SIGNING_PFX_PASSWORD /tr http://timestamp.digicert.com /td SHA256 AION2_CHT.exe
+          if ($LASTEXITCODE -ne 0) { throw "signtool failed with $LASTEXITCODE" }
+          Remove-Item $pfx -Force
+          Write-Host "Signed AION2_CHT.exe"
+
+      - name: Checksums
+        shell: pwsh
+        run: |
+          $hash = (Get-FileHash AION2_CHT.exe -Algorithm SHA256).Hash.ToLower()
+          "$hash  AION2_CHT.exe" | Set-Content AION2_CHT.exe.sha256 -Encoding ascii
+          "AION2_CHT.exe SHA-256: $hash" >> $env:GITHUB_STEP_SUMMARY
+
+      # Release 頁面要講清楚有冇簽章：未簽章時用家一定會見到 SmartScreen 警告
+      - name: Build release notes
+        shell: pwsh
+        run: |
+          $body = Get-Content .github/release-notes.md -Raw
+          $sig = (Get-AuthenticodeSignature AION2_CHT.exe)
+          if ($sig.Status -eq 'Valid') {
+            $note = "> ✅ 此版本已簽章：$($sig.SignerCertificate.Subject)"
+          } else {
+            $note = "> ⚠️ 此版本未簽章：首次執行時 SmartScreen 會顯示「無法辨識的應用程式」，按「更多資訊 → 仍要執行」即可；想之後唔再彈，可以先執行 ``Unblock-File .\AION2_CHT.exe``。"
+          }
+          Set-Content -Path release-body.md -Value ($body.TrimEnd() + "`n`n" + $note + "`n") -Encoding utf8
+          Write-Host "Authenticode 狀態：$($sig.Status)"
 
       - name: Publish release
         shell: bash
@@ -23,9 +79,10 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           if gh release view "$GITHUB_REF_NAME" > /dev/null 2>&1; then
-            gh release upload "$GITHUB_REF_NAME" AION2_CHT.exe --clobber
+            gh release upload "$GITHUB_REF_NAME" AION2_CHT.exe AION2_CHT.exe.sha256 --clobber
+            gh release edit "$GITHUB_REF_NAME" --notes-file release-body.md
           else
-            gh release create "$GITHUB_REF_NAME" AION2_CHT.exe \
+            gh release create "$GITHUB_REF_NAME" AION2_CHT.exe AION2_CHT.exe.sha256 \
               --title "AION2 繁體中文語言包 $GITHUB_REF_NAME" \
-              --notes-file .github/release-notes.md
+              --notes-file release-body.md
           fi

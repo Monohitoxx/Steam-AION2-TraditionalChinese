@@ -1,0 +1,11 @@
+# pipeline 需要嘅 Python 套件（建議 Python 3.13+，3.14 內建 zstd 更好）
+#   pycryptodome  AES-256-ECB
+#   lz4           LZ4 block 壓縮 / 解壓
+#   blake3        seed / header keystream 推導
+#   pyooz         Oodle 解壓（由官方 pak 抽 dat 必需）
+#   opencc        簡體 -> 繁體（--chs 來源可選）
+pycryptodome>=3.20
+lz4>=4.3
+blake3>=0.4
+pyooz>=0.0.8
+opencc-python-reimplemented>=0.1.7

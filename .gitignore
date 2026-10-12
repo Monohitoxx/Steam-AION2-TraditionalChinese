@@ -1,1 +1,13 @@
 AION2_CHT.exe
+
+# 語言包同步 pipeline：密鑰表同中間產物唔入 repo
+tools/langpack/keys.json
+tools/langpack/official*.dat
+tools/langpack/*.tmp.dat
+tools/langpack/reports/
+tools/langpack/__pycache__/
+__pycache__/
+*.pyc
+*.unpacked.bin
+regions/
+tools/re/regions/
