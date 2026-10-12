@@ -10,5 +10,8 @@ __pycache__/
 *.pyc
 *.unpacked.bin
 regions/
-tools/re/regions/
 regions*/
+# 逆向／記憶體分析工具（唔入 repo，只留喺本機）
+tools/re/
+tools/langpack/keyfind.py
+tools/langpack/crack_key_offline.py

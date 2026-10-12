@@ -131,10 +131,12 @@ entry_count × ( fstring key, fstring value )
 
 1. 讀檔並確認第一個 `int32` 是 `2`。
 2. 用 `header_key` XOR `dat[0x04:0x14]`，取得 `lz4_packed_size` / `body_size` / `raw_size`。
-3. 用 `aes_key` 以 AES-256-ECB 解密 `dat[0x14:]`，跳過開頭 32 bytes，再 LZ4 解壓成 `raw`。
+3. 用 `aes_key` 以 AES-256-ECB 解密 `dat[0x14:]`，跳過開頭 32 bytes（本體前綴），再 LZ4 解壓成 `raw`。
 4. 解析對照表、改文字。**同長度的替換（例如「揹」→「背」、「裡」→「里」）不會改動 `raw_size`**，header 只需換掉大小欄位。
-5. 反向重建：`raw` → LZ4（`lz4.block.compress(raw, mode="high_compression", store_size=False)`）→ 前面補 32 個 zero byte → 補零至 16 對齊 → AES-256-ECB 加密。
+5. 反向重建：`raw` → LZ4（`lz4.block.compress(raw, mode="high_compression", store_size=False)`）→ 前面補 32 bytes 前綴 → 補零至 16 對齊 → AES-256-ECB 加密。
 6. 新標頭 = 新的大小數值 XOR **同一組** `header_key`（同一語系的 seed 不變），前面接 `02 00 00 00` 寫回原位。
+
+> 本體開頭那 32 bytes 前綴：2026-10-09 之前的官方檔案是 32 個零；之後改成一段 32 bytes metadata（AES key 沒有換）。重建時**沿用官方檔案的前綴**最安全。
 
 ```python
 # 只需要 pycryptodome + lz4 + blake3 三個套件
@@ -145,16 +147,14 @@ def decrypt(dat, locale="en-US"):
     dec = AES.new(KEYS[seed], AES.MODE_ECB).decrypt(dat[20:20 + aligned])
     return lz4.block.decompress(dec[0x20:0x20 + packed], uncompressed_size=rawsize)  # -> raw
 
-def encrypt(raw, locale="en-US"):
+def encrypt(raw, locale="en-US", prefix=None):
     seed = h64(f"L10NString_{locale}".encode())
     packed = lz4.block.compress(raw, mode="high_compression", store_size=False)
-    body = bytes(0x20) + packed
+    body = (prefix or bytes(0x20)) + packed          # prefix 建議沿用官方檔案的值
     body += bytes(-len(body) % 16)
     header = xor(struct.pack("<iiii", len(packed), 2, len(body), len(raw)), header_key(seed))
     return struct.pack("<I", 2) + header + AES.new(KEYS[seed], AES.MODE_ECB).encrypt(body)
 ```
-
-> 沒有 BLAKE3 也可以離線作業：本體前 32 bytes 的明文一定是零，可以拿密鑰表逐一 AES 解密 `dat[0x14:0x34]` 比對來找出正確的 `aes_key`；`lz4_packed_size` 則可由 LZ4 block 的解碼結束位置（後面接著 0～15 個補零 byte）反推。
 
 改完語言包後記得重跑 `build.bat`，把新的 `L10NString.dat` 重新內嵌進 exe。
 
