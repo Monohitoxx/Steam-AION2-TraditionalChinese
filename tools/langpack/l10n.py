@@ -4,7 +4,11 @@
 
     +0x00  uint32   版本 = 2
     +0x04  16 bytes 標頭 = pack("<iiii", packed, etype, aligned, raw_size) XOR header_key(seed)
-    +0x14  ...      AES-256-ECB 加密本體 = 32 個 zero byte + LZ4 block + 補零至 16 對齊
+    +0x14  ...      AES-256-ECB 加密本體 = 32 bytes 前綴 + LZ4 block + 補零至 16 對齊
+
+32 bytes 前綴：2026-10 之前官方寫 32 個 zero byte；2026-10 更新之後改成 32 bytes
+隨機 metadata（key 冇換，LZ4 流位置一樣）。所以解密時唔應該再檢查「一定係零」，
+而係直接試 LZ4 解壓；重建時最好沿用官方嘅 32 bytes 前綴（見 `encrypt(prefix=…)`）。
 
 解壓後（raw）是「鍵 -> 文字」對照表::
 
@@ -34,6 +38,7 @@ import lz4.block
 from Crypto.Cipher import AES
 
 HEADER_SIZE = 20
+PREFIX_SIZE = 0x20  # 本體開頭 32 bytes：舊版係零，新版係隨機 metadata
 
 # 由遊戲常數推導出來的 header keystream root（同官方一致，唔需要密鑰表）
 HEADER_ROOT = struct.unpack("<Q", blake3.blake3(struct.pack("<Q", 0xCD02190910CE83F6)).digest()[:8])[0]
@@ -106,26 +111,47 @@ def decrypt(dat: bytes, locale: str = "en-US", keys: Dict[int, bytes] | None = N
             " 官方更新後可能換咗 key，需要重新取得（見 tools/langpack/README.md）。"
         )
     body = AES.new(key, AES.MODE_ECB).decrypt(dat[HEADER_SIZE:HEADER_SIZE + aligned])
-    if body[:32] != bytes(32):
+    try:
+        raw = lz4.block.decompress(body[PREFIX_SIZE:PREFIX_SIZE + packed], uncompressed_size=raw_size)
+    except Exception as exc:
         raise KeyMissing(
-            f"keys.json 嘅 L10NString_{locale} key 已經過期（解密結果唔符合格式）。"
-            " 官方每次更新都可能換 key，需要重新取得（見 tools/langpack/README.md）。"
-        )
-    raw = lz4.block.decompress(body[0x20:0x20 + packed], uncompressed_size=raw_size)
+            f"keys.json 嘅 L10NString_{locale} key 唔啱（LZ4 解壓失敗：{exc}）。"
+            " 官方更新後可能換咗 key，需要重新取得（見 tools/langpack/README.md）。"
+        ) from exc
     if len(raw) != raw_size:
         raise RuntimeError("LZ4 解壓長度唔對")
     return raw
 
 
-def encrypt(raw: bytes, locale: str = "en-US", keys: Dict[int, bytes] | None = None) -> bytes:
-    """壓縮 + 加密，回傳完整 v2 dat（可以直接寫入遊戲目錄）。"""
+def body_prefix(dat: bytes, locale: str = "en-US", keys: Dict[int, bytes] | None = None) -> bytes:
+    """讀出本體開頭 32 bytes 前綴（重建時沿用官方嘅值最安全）。"""
     keys = keys if keys is not None else load_keys()
     seed = seed_for(locale)
     key = keys.get(seed)
     if key is None:
         raise KeyMissing(f"keys.json 冇 L10NString_{locale} 嘅 key（seed={seed}）")
+    _, _, aligned, _ = header(dat, locale)
+    body = AES.new(key, AES.MODE_ECB).decrypt(dat[HEADER_SIZE:HEADER_SIZE + PREFIX_SIZE])
+    return body[:PREFIX_SIZE]
+
+
+def encrypt(raw: bytes, locale: str = "en-US", keys: Dict[int, bytes] | None = None,
+            prefix: bytes | None = None) -> bytes:
+    """壓縮 + 加密，回傳完整 v2 dat（可以直接寫入遊戲目錄）。
+
+    `prefix` 係本體開頭 32 bytes；唔提供就用 32 個零（舊格式）。
+    建議喺 sync.py 傳入官方 dat 嘅前綴（見 `body_prefix()`）。
+    """
+    keys = keys if keys is not None else load_keys()
+    seed = seed_for(locale)
+    key = keys.get(seed)
+    if key is None:
+        raise KeyMissing(f"keys.json 冇 L10NString_{locale} 嘅 key（seed={seed}）")
+    if prefix is None:
+        prefix = bytes(PREFIX_SIZE)
+    assert len(prefix) == PREFIX_SIZE, f"前綴要 {PREFIX_SIZE} bytes"
     packed = lz4.block.compress(raw, mode="high_compression", store_size=False)
-    body = bytes(0x20) + packed
+    body = bytes(prefix) + packed
     body += bytes(-len(body) % 16)
     hdr = xor(struct.pack("<iiii", len(packed), 2, len(body), len(raw)), header_key(seed))
     return struct.pack("<I", 2) + hdr + AES.new(key, AES.MODE_ECB).encrypt(body)

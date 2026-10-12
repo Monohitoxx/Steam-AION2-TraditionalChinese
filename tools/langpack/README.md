@@ -86,13 +86,24 @@ tools/langpack/
 ```
 +0x00  uint32   版本 = 2
 +0x04  16 bytes 標頭 = pack("<iiii", packed, etype=2, aligned, raw_size) XOR header_key(seed)
-+0x14  ...      AES-256-ECB 加密本體 = 32 個 zero byte + LZ4 block + 補零至 16 對齊
++0x14  ...      AES-256-ECB 加密本體 = 32 bytes 前綴 + LZ4 block + 補零至 16 對齊
 ```
 
 - `seed = u64_le(blake3("L10NString_en-US")[:8])`
 - `HEADER_ROOT = u64_le(blake3(pack("<Q", 0xCD02190910CE83F6))[:8])`
 - `header_key(seed, htype=3) = blake3(pack("<QQiI", HEADER_ROOT, seed, htype, 0))` ← 標頭 keystream，**唔需要密鑰表**
-- 本體 AES key = `keys.json[seed]` ← **官方更新會換，係 pipeline 唯一外部輸入**
+- 本體 AES key = `keys.json[seed]`
+
+**⚠️ 2026-10-09 官方更新：32 bytes 前綴由「32 個零」變成隨機 metadata**
+
+| | body[0x00:0x20] | body[0x20:…] |
+|---|---|---|
+| 舊（≤ 10-05） | `00 ×32` | LZ4 block |
+| 新（10-09 之後） | 32 bytes 隨機 metadata | **完全一樣**嘅 LZ4 block |
+
+- **AES key 冇換** ✓（同一條 key 仍然解得到新 dat：152,774 條）
+- 前綴唔係 hash（試過 `blake3(raw)`／`blake3(packed)` 都唔中）→ 所以 **重建時沿用官方嘅前綴** 最安全
+- `l10n.py` 已改成：`decrypt()` 直接試 LZ4（唔再要求零前綴）、新增 `body_prefix()`、`encrypt(..., prefix=…)`；`sync.py` 自動沿用官方前綴
 
 **官方 pak**（UE Pak v11，`pakchunk502000-Windows_0_P.pak`）：
 

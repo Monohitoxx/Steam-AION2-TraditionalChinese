@@ -67,11 +67,11 @@ def load_pairs(path: str) -> Tuple[str, List[Tuple[str, str]]]:
     raise SystemExit(f"{path} 格式唔啱（要 {{'namespace':..., 'entries': [[key, value], ...]}}）")
 
 
-def load_official(args) -> Tuple[str, List[Tuple[str, str]], str]:
-    """回傳 (namespace, entries, 來源說明)"""
+def load_official(args) -> Tuple[str, List[Tuple[str, str]], str, bytes, bytes | None]:
+    """回傳 (namespace, entries, 來源說明, 官方 dat bytes, 官方 32-byte 前綴)"""
     if args.official_json:
         ns, entries = load_pairs(args.official_json)
-        return ns, entries, f"plaintext {args.official_json}"
+        return ns, entries, f"plaintext {args.official_json}", b"", None
     dat = args.official_dat
     if not dat and args.game:
         import pak_extract
@@ -84,9 +84,16 @@ def load_official(args) -> Tuple[str, List[Tuple[str, str]], str]:
         print(f"由 pak 抽出官方 dat：{pak}\n  -> {dat}")
     if not dat:
         raise SystemExit("要提供 --game / --official-dat / --official-json 其中一個")
-    raw = l10n.decrypt(open(dat, "rb").read(), args.locale, args.keys)
+    dat_bytes = open(dat, "rb").read()
+    raw = l10n.decrypt(dat_bytes, args.locale, args.keys)
     ns, entries = l10n.parse(raw)
-    return ns, entries, dat
+    try:
+        prefix = l10n.body_prefix(dat_bytes, args.locale, args.keys)
+        if prefix == bytes(l10n.PREFIX_SIZE):
+            prefix = None  # 舊格式（零前綴）就無所謂
+    except Exception:
+        prefix = None
+    return ns, entries, dat, dat_bytes, prefix
 
 
 def write_reports(report_dir: str, stamp: str, official: Dict[str, str], current: Dict[str, str],
@@ -156,7 +163,7 @@ def main(argv: List[str] | None = None) -> int:
     args = ap.parse_args(argv)
 
     args.keys = l10n.load_keys(args.keys)
-    namespace, official_entries, source = load_official(args)
+    namespace, official_entries, source, official_dat, official_prefix = load_official(args)
     official = dict(official_entries)
     print(f"官方條目 {len(official)}（{source}）")
 
@@ -228,11 +235,15 @@ def main(argv: List[str] | None = None) -> int:
         return 0
 
     raw = l10n.build(namespace, [(k, current[k]) for k, _ in official_entries])
-    dat = l10n.encrypt(raw, args.locale, args.keys)
+    # 官方 2026-10 之後本體開頭 32 bytes 唔再係零，而係一段 metadata；
+    # 重建時沿用官方嘅前綴最安全（key 冇換，所以解得開就一定讀得到）。
+    prefix = official_prefix if official_prefix else None
+    dat = l10n.encrypt(raw, args.locale, args.keys, prefix=prefix)
     os.makedirs(os.path.dirname(os.path.abspath(args.out)), exist_ok=True)
     with open(args.out, "wb") as fh:
         fh.write(dat)
-    print(f"語言包 -> {args.out}（{len(dat)} bytes, {len(current)} 條）")
+    print(f"語言包 -> {args.out}（{len(dat)} bytes, {len(current)} 條"
+          + ("，沿用官方 32-byte 前綴" if prefix else "，前綴用零") + "）")
 
     if args.build:
         bat = os.path.join(REPO, "build.bat")
