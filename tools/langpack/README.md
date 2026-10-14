@@ -10,7 +10,7 @@
 | 解出 v2 容器標頭（BLAKE3 keystream，唔需要 key） | ✅ 完成 |
 | 用 AES key 解密本體 | ✅ 完成（key 由 `keys.json` 提供，唔會 commit；**10-09 格式更新後仍然有效**） |
 | 對照表 parse / build、翻譯記憶（TM）、diff 報告、重建 dat | ✅ 完成（10 萬條級完整回歸測試：重建後內容 0 差異） |
-| 依官方 10-09 版本重建 | ✅ 152,774 條，沿用官方 32-byte 前綴 |
+| 依官方 10-14 版本重建 | ✅ 153,042 條，新增 268 條已翻譯、157 條改動已覆核，沿用官方 32-byte 前綴 |
 
 `keycheck.py` 會直接講你知 key 係唔係仍然有效：
 
@@ -23,6 +23,12 @@ $ python keycheck.py --game "D:\SteamLibrary\steamapps\common\AION2"
 
 ## 快速開始
 
+2026-10-14 官方 pak 改成未壓縮、外層 AES-256-ECB 加密；抽取工具已支援。
+外層 pak key 同 `keys.json` 嘅語言檔 key 係兩回事。將外層 key 放喺本機
+`tools/langpack/pak-keys.json`（格式 `{"default": "<32 bytes hex>"}`），或設定
+`AION2_PAK_KEY`；亦可用 `AION2_PAK_KEYS` 指定密鑰檔路徑。密鑰檔已 gitignore，唔好公開。
+工具會先核對 pak entry 嘅 SHA-1，再解密；今日版本實測可解析 153,042 條英文文字。
+
 ```bash
 pip install -r tools/langpack/requirements.txt
 export AION2_KEYS=/path/to/keys.json          # 或者放 tools/langpack/keys.json（已 gitignore）
@@ -34,10 +40,13 @@ python tools/langpack/keycheck.py --game "D:\SteamLibrary\steamapps\common\AION2
 python tools/langpack/sync.py --game "D:\SteamLibrary\steamapps\common\AION2" --build
 
 # 3) 想睇報告但唔寫 dat
-python tools/langpack/sync.py --official-dat official-en-US.dat --dry-run
+python tools/langpack/sync.py --official-dat official-en-US.dat --dry-run --tm-out tools/langpack/reports/check-tm.json.zst --snapshot-out tools/langpack/reports/check-snapshot.json.zst
 ```
 
 第一次由舊語言包建立翻譯記憶（key 未過期時做，之後換 key 都唔怕）：
+
+注意：`--dry-run` 只跳過寫入 dat，仍會寫 TM 同快照。純檢查時應像上例指定
+`--tm-out` 同 `--snapshot-out`，避免覆蓋正式基準。
 
 ```bash
 python tools/langpack/tm_export.py langpack/L10NString.dat tools/langpack/tm/zh-TW.json.zst
