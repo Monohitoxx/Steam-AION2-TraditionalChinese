@@ -10,7 +10,7 @@
 | 解出 v2 容器標頭（BLAKE3 keystream，唔需要 key） | ✅ 完成 |
 | 用 AES key 解密本體 | ✅ 完成（key 由 `keys.json` 提供，唔會 commit；**10-09 格式更新後仍然有效**） |
 | 對照表 parse / build、翻譯記憶（TM）、diff 報告、重建 dat | ✅ 完成（10 萬條級完整回歸測試：重建後內容 0 差異） |
-| 依官方 10-14 版本重建 | ✅ 153,042 條，新增 268 條已翻譯、157 條改動已覆核，沿用官方 32-byte 前綴 |
+| 依官方 10-21 版本重建 | ✅ 153,185 條，新增 143 條已翻譯、227 條改動已覆核，沿用官方 32-byte 前綴 |
 
 `keycheck.py` 會直接講你知 key 係唔係仍然有效：
 
@@ -27,7 +27,7 @@ $ python keycheck.py --game "D:\SteamLibrary\steamapps\common\AION2"
 外層 pak key 同 `keys.json` 嘅語言檔 key 係兩回事。將外層 key 放喺本機
 `tools/langpack/pak-keys.json`（格式 `{"default": "<32 bytes hex>"}`），或設定
 `AION2_PAK_KEY`；亦可用 `AION2_PAK_KEYS` 指定密鑰檔路徑。密鑰檔已 gitignore，唔好公開。
-工具會先核對 pak entry 嘅 SHA-1，再解密；今日版本實測可解析 153,042 條英文文字。
+工具會先核對 pak entry 嘅 SHA-1，再解密；10 月 21 日版本實測可解析 153,185 條英文文字。
 
 ```bash
 pip install -r tools/langpack/requirements.txt
