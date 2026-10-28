@@ -22,8 +22,8 @@ using Microsoft.Win32;
 [assembly: AssemblyProduct("AION2 繁體中文語言包")]
 [assembly: AssemblyCompany("Monohitoxx")]
 [assembly: AssemblyCopyright("Copyright © Monohitoxx")]
-[assembly: AssemblyVersion("1.0.4.0")]
-[assembly: AssemblyFileVersion("1.0.4.0")]
+[assembly: AssemblyVersion("1.0.5.0")]
+[assembly: AssemblyFileVersion("1.0.5.0")]
 
 static class Patch
 {
